@@ -31,3 +31,5 @@ application.properties
 nbactions.xml
 
 nbproject/private/
+
+rsync_to_server.sh
