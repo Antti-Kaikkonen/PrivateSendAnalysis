@@ -23,7 +23,7 @@ public class RandomCombinationAdderTask implements Runnable, Comparable<RandomCo
     String neo4jpassword;
     String evaluatorurl;
     
-    private static final long TIME = 10000;
+    private static final long TIME = 100000;
     
     public RandomCombinationAdderTask(String txid, int inputCount, long priority, ThreadPoolExecutor executor, String neo4jusername, String neo4jpassowrd, String evaluatorurl) {
         this.txid = txid;
@@ -106,8 +106,8 @@ public class RandomCombinationAdderTask implements Runnable, Comparable<RandomCo
                     mincount = resultAndCount.count;
                 }
             }
-            long newPriority = this.priority+TIME+mincount*10;
-            if (newPriority <= 100000) {
+            long newPriority = this.priority+TIME+mincount*100;
+            if (newPriority <= 1000000) {
                 RandomCombinationAdderTask next = new RandomCombinationAdderTask(txid, inputCount, newPriority, executor, neo4jusername, neo4jpassword, evaluatorurl);
                 executor.execute(next);
             }

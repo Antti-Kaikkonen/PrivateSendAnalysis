@@ -2,6 +2,7 @@ package com.dashradar.privatesendanalysis;
 
 import com.dashradar.dashradarbackend.config.PersistenceContext;
 import com.dashradar.dashradarbackend.domain.Transaction;
+import com.dashradar.dashradarbackend.repository.BlockRepository;
 import com.dashradar.dashradarbackend.repository.MultiInputHeuristicClusterRepository;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -44,6 +45,9 @@ public class Main {
     @Autowired
     private MultiInputHeuristicClusterRepository multiInputHeuristicClusterRepository;
     
+    @Autowired
+    private BlockRepository blockRepository;
+    
     public static void main(String[] args) throws IOException {
         SpringApplication.run(Main.class, args);
     }
@@ -58,48 +62,6 @@ public class Main {
     public CommandLineRunner commandLineRunner(ApplicationContext ctx) {
         
         return args -> {
-            ArrayList<PrivateSendTransactionDTO> txids = loadPrivateSendTxIds(906000, 9900000);
-            System.out.println("txids.size:"+txids.size());
-            Map<PrivateSendTransactionDTO, Long> txidToPriority = txids
-            .parallelStream()
-            //.filter(txid -> txid.txid.endsWith("592d1daa5c3cd093aa990ecb67d07eba30634b72f032963c00c7ac2118bc7aca"))
-            .map(pstx -> {
-                Map<String, Object> res = new HashMap<>();
-                res.put("pstx", pstx);
-                try {
-                    long priority = Stream.of("2", "3", "4", "5", "6", "7", "8").mapToLong(e -> {
-                        try {
-                            //File f = new File("psresults/"+e+"/"+pstx.txid+".txt");
-                            //if (!f.exists()) return Long.MAX_VALUE/2;
-                            ResultAndCount rs = ResultAndCount.loadResultAndCountFromFile(e+"/"+pstx.txid);
-                            if (rs.notfound) {
-                                return Long.MAX_VALUE/2;
-                            } else {
-                                //if (rs.count == 0 && rs.time < 60000) return 0;
-                                return rs.time+rs.count*10;
-                            }
-                        } catch(Exception ex) {
-                            //return 0;
-                            return Long.MAX_VALUE/2;//only existing
-                        }    
-                    }).min().getAsLong();
-                    //res.put("mincount", mincount);
-                    res.put("priority", priority);
-                    //res.put("time", ResultAndCount.loadResultAndCountFromFile("8/"+pstx.txid).time + mincount/10);
-                } catch (Exception ex) {
-                    res.put("priority", 0);
-                    //res.put("mincount", 0);
-                }
-                return res;
-            })
-            .filter(e -> (long)e.get("priority") >= 0 && (long)e.get("priority") <= 100000)
-            .collect(Collectors.toMap(toKey -> (PrivateSendTransactionDTO)toKey.get("pstx"), toValue -> (long)toValue.get("priority")));
-            long min = txidToPriority.entrySet().stream().min((a, b) -> Long.compare(a.getValue(), b.getValue())).get().getValue();
-            System.out.println("min priority:"+min);
-
-            long minCount = txidToPriority.entrySet().stream().filter(e -> e.getValue().equals(min)).count();
-            System.out.println("mincount="+minCount);
-            
             int qInitialSize = 10;
             ThreadPoolExecutor tpe = new ThreadPoolExecutor(16, 16, 1000, TimeUnit.MILLISECONDS, new PriorityBlockingQueue<Runnable>(qInitialSize, new Comparator<Runnable>() {
                 @Override
@@ -110,29 +72,70 @@ public class Main {
                 }
             }));
             tpe.allowCoreThreadTimeOut(true);
-            txidToPriority.entrySet()
-                    .stream()
-                    //.filter(e -> e.getValue() > 0 && e.getValue() < Long.MAX_VALUE/10)
-                    .map(e -> new RandomCombinationAdderTask(e.getKey().txid, e.getKey().inputCount, e.getValue(), tpe, neo4jusername, neo4jpassword, neo4jevaluatorurl))
-                    .sorted()
-                    .forEach(task -> {
-                        tpe.execute(task); 
-                    });
+            
+            
+            Long fromBlock = blockRepository.findBlockHeightByHash(blockRepository.findBestBlockHash())-10000;
+            
+            
             while (true) {
-                Thread.sleep(30000);
+                Long toBlock = blockRepository.findBlockHeightByHash(blockRepository.findBestBlockHash());
+                if (toBlock > fromBlock) {
+                    
+                    ArrayList<PrivateSendTransactionDTO> txids = loadPrivateSendTxIds(fromBlock, toBlock);
+                    System.out.println("txids.size="+txids.size());
+                    Map<PrivateSendTransactionDTO, Long> txidToPriority = txids
+                    .parallelStream()
+                    .map(pstx -> {
+                        Map<String, Object> res = new HashMap<>();
+                        res.put("pstx", pstx);
+                        try {
+                            long priority = Stream.of("2", "3", "4", "5", "6", "7", "8").mapToLong(e -> {
+                                try {
+                                    ResultAndCount rs = ResultAndCount.loadResultAndCountFromFile(e+"/"+pstx.txid);
+                                    if (rs.notfound) {
+                                        return Long.MAX_VALUE/2;
+                                    } else {
+                                        return rs.time+rs.count*100;
+                                    }
+                                } catch(Exception ex) {
+                                    return Long.MAX_VALUE/2;
+                                }    
+                            }).min().getAsLong();
+                            res.put("priority", priority);
+                        } catch (Exception ex) {
+                            res.put("priority", 0);
+                        }
+                        return res;
+                    })
+                    .filter(e -> (long)e.get("priority") >= 0 && (long)e.get("priority") <= 1000000)
+                    .collect(Collectors.toMap(toKey -> (PrivateSendTransactionDTO)toKey.get("pstx"), toValue -> (long)toValue.get("priority")));
+
+                    txidToPriority.entrySet()
+                            .stream()
+                            .map(e -> new RandomCombinationAdderTask(e.getKey().txid, e.getKey().inputCount, e.getValue(), tpe, neo4jusername, neo4jpassword, neo4jevaluatorurl))
+                            .sorted()
+                            .forEach(task -> {
+                                tpe.execute(task); 
+                            });
+                    
+                    fromBlock = toBlock;
+                } else {
+                    System.out.println("No new blocks");
+                }
                 System.out.println("TPE:"+tpe.getPoolSize()+", "+ tpe.getActiveCount()+", "+tpe.getQueue().size());
+                Thread.sleep(30000);
             }
         };
     }    
     
     
-    public ArrayList<PrivateSendTransactionDTO> loadPrivateSendTxIds(int minblock, int maxblock) {
+    public ArrayList<PrivateSendTransactionDTO> loadPrivateSendTxIds(long minblock, long maxblock) {
         Session openSession = sessionFactory.openSession();
         HashMap<String, Object> params = new HashMap<>();
         params.put("minblock", minblock);
         params.put("maxblock", maxblock);
         Result privatesendtxids = openSession.query("MATCH (input:TransactionInput)-[:INPUT]->(tx:Transaction {pstype:"+Transaction.PRIVATE_SEND+"})-[:INCLUDED_IN]->(block:Block) "
-                + "WHERE block.height >= $minblock AND block.height < $maxblock "
+                + "WHERE block.height >= $minblock AND block.height <= $maxblock "
                 + "RETURN tx.txid as txid, count(input) as inputCount, block.height as height;", 
                 params);
         ArrayList<PrivateSendTransactionDTO> result = new ArrayList<>();
