@@ -1,0 +1,10 @@
+#Rename this file to application.properties
+neo4j.URI=http://neo4j:neo4jpassword@localhost:7474
+neo4j.driver=org.neo4j.ogm.drivers.http.driver.HttpDriver
+
+logging.level.root=ERROR
+log4j.logger.org.springframework.transaction=INFO
+
+neo4jusername=neo4j
+neo4jpassword=neo4jpassword
+neo4jevaluatorurl=http://localhost:7474/v1/dashradar/psgraph

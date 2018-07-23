@@ -107,7 +107,7 @@ public class Main {
                         }
                         return res;
                     })
-                    .filter(e -> (long)e.get("priority") >= 0 && (long)e.get("priority") <= 1000000)
+                    .filter(e -> (long)e.get("priority") >= 0 && (long)e.get("priority") <= 200000)
                     .collect(Collectors.toMap(toKey -> (PrivateSendTransactionDTO)toKey.get("pstx"), toValue -> (long)toValue.get("priority")));
 
                     txidToPriority.entrySet()
@@ -135,7 +135,7 @@ public class Main {
         params.put("minblock", minblock);
         params.put("maxblock", maxblock);
         Result privatesendtxids = openSession.query("MATCH (input:TransactionInput)-[:INPUT]->(tx:Transaction {pstype:"+Transaction.PRIVATE_SEND+"})-[:INCLUDED_IN]->(block:Block) "
-                + "WHERE block.height >= $minblock AND block.height <= $maxblock "
+                + "WHERE block.height > $minblock AND block.height <= $maxblock "
                 + "RETURN tx.txid as txid, count(input) as inputCount, block.height as height;", 
                 params);
         ArrayList<PrivateSendTransactionDTO> result = new ArrayList<>();
