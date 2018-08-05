@@ -62,12 +62,20 @@ public class Main {
     public CommandLineRunner commandLineRunner(ApplicationContext ctx) {
         
         return args -> {
+            System.out.println("Args begin");
+            for (String arg : args) {
+                System.out.println(arg);
+            }
+            
+            String directory = "psresults/clusters";
+            
+            System.out.println("Args end");
             int qInitialSize = 10;
-            ThreadPoolExecutor tpe = new ThreadPoolExecutor(16, 16, 1000, TimeUnit.MILLISECONDS, new PriorityBlockingQueue<Runnable>(qInitialSize, new Comparator<Runnable>() {
+            ThreadPoolExecutor tpe = new ThreadPoolExecutor(14, 14, 1000, TimeUnit.MILLISECONDS, new PriorityBlockingQueue<Runnable>(qInitialSize, new Comparator<Runnable>() {
                 @Override
                 public int compare(Runnable o1, Runnable o2) {
-                    RandomCombinationAdderTask a = (RandomCombinationAdderTask)o1;
-                    RandomCombinationAdderTask b = (RandomCombinationAdderTask)o2;
+                    Comparable<Comparable> a = (Comparable<Comparable>)o1;
+                    Comparable<Comparable> b = (Comparable<Comparable>)o2;
                     return a.compareTo(b);
                 }
             }));
@@ -75,7 +83,7 @@ public class Main {
             
             
             Long fromBlock = blockRepository.findBlockHeightByHash(blockRepository.findBestBlockHash())-10000;
-            
+
             
             while (true) {
                 Long toBlock = blockRepository.findBlockHeightByHash(blockRepository.findBestBlockHash());
@@ -89,9 +97,9 @@ public class Main {
                         Map<String, Object> res = new HashMap<>();
                         res.put("pstx", pstx);
                         try {
-                            long priority = Stream.of("2", "3", "4", "5", "6", "7", "8").mapToLong(e -> {
+                            long priority = Stream.of("2", "3", "4", "5", "6", "7", "8").mapToLong(rounds -> {
                                 try {
-                                    ResultAndCount rs = ResultAndCount.loadResultAndCountFromFile(e+"/"+pstx.txid);
+                                    ResultAndCount rs = ResultAndCount.loadResultAndCountFromFile(directory+"/"+rounds+"/"+pstx.txid+".txt");
                                     if (rs.notfound) {
                                         return Long.MAX_VALUE/2;
                                     } else {
@@ -112,7 +120,7 @@ public class Main {
 
                     txidToPriority.entrySet()
                             .stream()
-                            .map(e -> new RandomCombinationAdderTask(e.getKey().txid, e.getKey().inputCount, e.getValue(), tpe, neo4jusername, neo4jpassword, neo4jevaluatorurl))
+                            .map(e -> new RandomCombinationAdderTaskAddressClustersImpl(e.getKey().txid, e.getKey().inputCount, e.getValue(), tpe, neo4jusername, neo4jpassword, neo4jevaluatorurl, sessionFactory))
                             .sorted()
                             .forEach(task -> {
                                 tpe.execute(task); 

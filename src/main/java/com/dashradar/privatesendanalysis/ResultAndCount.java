@@ -67,9 +67,9 @@ public class ResultAndCount {
     
     
     
-    public static ResultAndCount loadResultAndCountFromFile(String txid) throws FileNotFoundException {
+    public static ResultAndCount loadResultAndCountFromFile(String filePath) throws FileNotFoundException {
         ResultAndCount rs = new ResultAndCount();
-        try (Scanner scanner = new Scanner(new File("psresults/"+txid+".txt"))) {
+        try (Scanner scanner = new Scanner(new File(filePath))) {
             while (scanner.hasNextLine()) {
                 String line = scanner.nextLine();
                 String[] components = line.split("=");
@@ -89,8 +89,9 @@ public class ResultAndCount {
         return rs;
     }
     
-    public void saveResultAndCountToFile(String txid) throws FileNotFoundException, IOException {
-        File f = new File("psresults/"+txid+".txt");
+    public File saveResultAndCountToFile(String filePath) throws FileNotFoundException, IOException {
+        //File f = new File("psresults/"+txid+".txt");
+        File f = new File(filePath);
         f.getParentFile().mkdirs();
         PrintWriter pw = new PrintWriter(f);
         pw.println("count="+this.count);
@@ -100,20 +101,21 @@ public class ResultAndCount {
             pw.println(e.getKey()+"="+e.getValue());
         });
         pw.close();
-        try {
-            Path symbolicLinkPath = Paths.get("psresults/modified/"+txid+".txt");
-            Files.createDirectories(symbolicLinkPath.getParent());
-            Files.deleteIfExists(symbolicLinkPath);
-            Files.createSymbolicLink(symbolicLinkPath, symbolicLinkPath.getParent().relativize(Paths.get("psresults/"+txid+".txt")));//For faster rsync
-        } catch(Exception ex) {
-            ex.printStackTrace();
-        }
+        return f;
+//        try {
+//            Path symbolicLinkPath = Paths.get("psresults/modified/"+txid+".txt");
+//            Files.createDirectories(symbolicLinkPath.getParent());
+//            Files.deleteIfExists(symbolicLinkPath);
+//            Files.createSymbolicLink(symbolicLinkPath, symbolicLinkPath.getParent().relativize(Paths.get("psresults/"+txid+".txt")));//For faster rsync
+//        } catch(Exception ex) {
+//            ex.printStackTrace();
+//        }
     }
     
-    public ResultAndCount mergeResultAndCountToFile(String txid) throws IOException {
-        ResultAndCount old = loadResultAndCountFromFile(txid);
+    public ResultAndCount mergeResultAndCountToFile(String filePath) throws IOException {
+        ResultAndCount old = loadResultAndCountFromFile(filePath);
         ResultAndCount merged = this.combineWith(old);
-        merged.saveResultAndCountToFile(txid);
+        merged.saveResultAndCountToFile(filePath);
         return merged;
     }
     

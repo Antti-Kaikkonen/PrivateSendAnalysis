@@ -1,19 +1,23 @@
-
 package com.dashradar.privatesendanalysis;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
-import java.util.HashMap;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.jgrapht.graph.DefaultEdge;
 
+public abstract class AbstractRandomCombinationAdderTask implements RandomCombinationAdderTaskInterface {
 
-public class RandomCombinationAdderTask implements Runnable, Comparable<RandomCombinationAdderTask> {
+    String directory;
+    String modifiedDirectory;
+    int time;
     
     String txid;
     long priority;
@@ -23,9 +27,12 @@ public class RandomCombinationAdderTask implements Runnable, Comparable<RandomCo
     String neo4jpassword;
     String evaluatorurl;
     
-    private static final long TIME = 30000;
+    PathIteratorImpl pi;
+    ResultAndCount resultAndCount;
     
-    public RandomCombinationAdderTask(String txid, int inputCount, long priority, ThreadPoolExecutor executor, String neo4jusername, String neo4jpassowrd, String evaluatorurl) {
+    //private static final long TIME = 30000;
+    
+    public AbstractRandomCombinationAdderTask(String txid, int inputCount, long priority, ThreadPoolExecutor executor, String neo4jusername, String neo4jpassowrd, String evaluatorurl, String directory, String modifiedDirectory, int time) {
         this.txid = txid;
         this.priority = priority;
         this.executor = executor;
@@ -33,14 +40,20 @@ public class RandomCombinationAdderTask implements Runnable, Comparable<RandomCo
         this.neo4jusername = neo4jusername;
         this.neo4jpassword = neo4jpassowrd;
         this.evaluatorurl = evaluatorurl;
+        this.directory = directory;
+        this.modifiedDirectory = modifiedDirectory;
+        this.time = time;
     }
 
     @Override
-    public int compareTo(RandomCombinationAdderTask o) {
+    public int compareTo(AbstractRandomCombinationAdderTask o) {
         return Long.compare(this.priority, o.priority);
     }
+
+
+    abstract Consumer<List<List<DefaultEdge>>> getConsumer();
     
-    
+
     @Override
     public void run() {
         try {
@@ -50,7 +63,8 @@ public class RandomCombinationAdderTask implements Runnable, Comparable<RandomCo
                 return;
             } else if (loadFromEvaluator.outDegreeOf(loadFromEvaluator.rootNode().get()) != inputCount) {
                 for (int i = 2; i <= 8; i++) {
-                    String path = "psresults/"+i+"/"+txid+".txt";
+                    String path = directory+"/"+i+"/"+txid+".txt";
+                    //String path = "psresults/"+directory+"/"+i+"/"+txid+".txt";
                     File f = new File(path);
                     if (f.exists()) {
                         f.delete();
@@ -61,31 +75,25 @@ public class RandomCombinationAdderTask implements Runnable, Comparable<RandomCo
                 return;
             }
             //System.out.println("executing "+txid+". timespent="+timespent);
-            PathIteratorImpl pi = new PathIteratorImpl(loadFromEvaluator);
+            this.pi = new PathIteratorImpl(loadFromEvaluator);
+            
             long mincount = Long.MAX_VALUE/2;
             for (int rounds = 2; rounds <= 8; rounds++) {
-                ResultAndCount old = ResultAndCount.loadResultAndCountFromFile(rounds+"/"+txid);
+                String filePath = directory+"/"+rounds+"/"+txid+".txt";
+                ResultAndCount old = ResultAndCount.loadResultAndCountFromFile(filePath);
                 if (old.notfound || old.count > 100000) {
                     if (old.count > 100000) System.out.println("OVER 100k");
                     continue;
                 }
                 System.out.println("executing "+txid+". priority="+priority+", rounds="+rounds);
-                long stopAt = System.currentTimeMillis()+TIME;
-                long timeleft = TIME;
+                long stopAt = System.currentTimeMillis()+time;
+                long timeleft = time;
                 final int roundsfinal = rounds;
                 pi.pathFilter = ((List<DefaultEdge> path) -> path.size() == roundsfinal+1);
                 
-                ResultAndCount resultAndCount = new ResultAndCount();
-                pi.acceptedCombinationConsumer = ((List<List<DefaultEdge>> combination) -> {
-                    Map<String, Long> combinationResult = new HashMap<>();
-                    combination.forEach(e -> {
-                        DefaultEdge lastEdge = e.get(e.size()-1);
-                        String to = pi.graph.getEdgeTarget(lastEdge);
-                        //result.compute(to, (k, v) -> v == null ? 1 : v+1);
-                        combinationResult.compute(to, (k, v) -> v == null ? 1l : 1l);
-                    });
-                    resultAndCount.addCombination(combinationResult);               
-                });
+                this.resultAndCount = new ResultAndCount();
+                
+                pi.acceptedCombinationConsumer = getConsumer();
                 PathIteratorImpl.RESULT found = null;
                 while (timeleft >= 0) {
                     found = pi.randomCombination(rounds, 1000);
@@ -100,25 +108,32 @@ public class RandomCombinationAdderTask implements Runnable, Comparable<RandomCo
                 } else {
                     System.out.println(txid+" "+rounds+"-rounds FOUND");
                 }
-                resultAndCount.time += TIME;
+                resultAndCount.time += time;
                 ResultAndCount merged = resultAndCount.combineWith(old);
-                merged.saveResultAndCountToFile(rounds+"/"+txid);
+                File savedFile = merged.saveResultAndCountToFile(filePath);
+                try {
+                    Path symbolicLinkPath = Paths.get(modifiedDirectory+"/"+rounds+"/"+txid+".txt");
+                    Files.createDirectories(symbolicLinkPath.getParent());
+                    Files.deleteIfExists(symbolicLinkPath);
+                    Files.createSymbolicLink(symbolicLinkPath, symbolicLinkPath.getParent().relativize(Paths.get(filePath)));//For faster rsync
+                } catch(Exception ex) {
+                    ex.printStackTrace();
+                }
                 if (resultAndCount.notfound == false && resultAndCount.count < mincount) {
                     mincount = resultAndCount.count;
                 }
             }
-            long newPriority = this.priority+TIME+mincount*100;
-            if (newPriority <= 200000) {
-                RandomCombinationAdderTask next = new RandomCombinationAdderTask(txid, inputCount, newPriority, executor, neo4jusername, neo4jpassword, evaluatorurl);
-                executor.execute(next);
-            }
+            long newPriority = this.priority+time+mincount*100;
+            finish(newPriority);
         } catch (UnsupportedEncodingException ex) {
-            Logger.getLogger(RandomCombinationAdderTask.class.getName()).log(Level.SEVERE, null, ex);
+            Logger.getLogger(RandomCombinationAdderTask2.class.getName()).log(Level.SEVERE, null, ex);
         } catch (IOException ex) {
-            Logger.getLogger(RandomCombinationAdderTask.class.getName()).log(Level.SEVERE, null, ex);
+            Logger.getLogger(RandomCombinationAdderTask2.class.getName()).log(Level.SEVERE, null, ex);
         } catch (Error ex) {
             
         }
     }
+
+    abstract void finish(long newPriority);
     
 }
