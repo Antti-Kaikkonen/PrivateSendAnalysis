@@ -13,7 +13,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.jgrapht.graph.DefaultEdge;
 
-public abstract class AbstractRandomCombinationAdderTask implements RandomCombinationAdderTaskInterface {
+public abstract class AbstractRandomCombinationAdderTask implements RandomCombinationAdderTask {
 
     String directory;
     String modifiedDirectory;
@@ -126,9 +126,9 @@ public abstract class AbstractRandomCombinationAdderTask implements RandomCombin
             long newPriority = this.priority+time+mincount*100;
             finish(newPriority);
         } catch (UnsupportedEncodingException ex) {
-            Logger.getLogger(RandomCombinationAdderTask2.class.getName()).log(Level.SEVERE, null, ex);
+            Logger.getLogger(AbstractRandomCombinationAdderTask.class.getName()).log(Level.SEVERE, null, ex);
         } catch (IOException ex) {
-            Logger.getLogger(RandomCombinationAdderTask2.class.getName()).log(Level.SEVERE, null, ex);
+            Logger.getLogger(AbstractRandomCombinationAdderTask.class.getName()).log(Level.SEVERE, null, ex);
         } catch (Error ex) {
             
         }
