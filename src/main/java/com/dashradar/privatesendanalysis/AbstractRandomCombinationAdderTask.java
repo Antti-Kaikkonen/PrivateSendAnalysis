@@ -88,6 +88,7 @@ public abstract class AbstractRandomCombinationAdderTask implements RandomCombin
                 if (isResultAndCountOutdated(old)) {
                     System.out.println(txid+" "+rounds+" outdated!");
                     old = new ResultAndCount();
+                    this.priority = 0;
                 }
                 if (old.notfound || old.count > 100000) {
                     if (old.count > 100000) System.out.println("OVER 100k");

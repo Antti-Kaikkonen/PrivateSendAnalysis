@@ -82,7 +82,7 @@ public class Main {
             tpe.allowCoreThreadTimeOut(true);
             
             
-            Long fromBlock = blockRepository.findBlockHeightByHash(blockRepository.findBestBlockHash())-5000;
+            Long fromBlock = blockRepository.findBlockHeightByHash(blockRepository.findBestBlockHash())-300;
 
             
             while (true) {

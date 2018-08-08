@@ -97,11 +97,11 @@ public class RandomCombinationAdderTaskAddressClustersImpl extends AbstractRando
         params.put("address", address);
         Result txidToCluster = openSession.query(     
         "OPTIONAL MATCH (c:MultiInputHeuristicCluster)<-[:INCLUDED_IN]-(:Address {address:$address})\n" +
-        "WITH txid, address, c\n" +
+        "WITH c\n" +
         "OPTIONAL MATCH (c)<-[:INCLUDED_IN]-(firstClusterAddress:Address)\n" +
-        "WITH txid, firstClusterAddress.address as clusterAddress, c, $address as address\n" +
+        "WITH firstClusterAddress.address as clusterAddress, c\n" +
         "LIMIT 1\n" +
-        "RETURN txid, coalesce(clusterAddress, address.address) as clusterId, coalesce(c.clusterSize, 1) as clusterSize;", params);
+        "RETURN coalesce(clusterAddress, $address) as clusterId, coalesce(c.clusterSize, 1) as clusterSize;", params);
         for (Map<String, Object> e :txidToCluster.queryResults()) {
             Cluster c = new Cluster();
             c.clusterSize = (int) e.get("clusterSize");
@@ -117,14 +117,14 @@ public class RandomCombinationAdderTaskAddressClustersImpl extends AbstractRando
         params.put("txid", txid);
         Result txidToCluster = openSession.query(
         "MATCH (address:Address)<-[:ADDRESS]-(:TransactionOutput)-[:SPENT_IN]->(:TransactionInput)-[:INPUT]->(:Transaction {txid:$txid})\n" +
-        "WITH $txid as txid, address\n" +
+        "WITH address\n" +
         "LIMIT 1\n" +      
         "OPTIONAL MATCH (c:MultiInputHeuristicCluster)<-[:INCLUDED_IN]-(address)\n" +
-        "WITH txid, address, c\n" +
+        "WITH address, c\n" +
         "OPTIONAL MATCH (c)<-[:INCLUDED_IN]-(firstClusterAddress:Address)\n" +
-        "WITH txid, firstClusterAddress.address as clusterAddress, c, address\n" +
+        "WITH firstClusterAddress.address as clusterAddress, c, address\n" +
         "LIMIT 1\n" +
-        "RETURN txid, coalesce(clusterAddress, address.address) as clusterId, coalesce(c.clusterSize, 1) as clusterSize;", params);
+        "RETURN coalesce(clusterAddress, address.address) as clusterId, coalesce(c.clusterSize, 1) as clusterSize;", params);
         for (Map<String, Object> e :txidToCluster.queryResults()) {
             Cluster c = new Cluster();
             c.clusterSize = (int) e.get("clusterSize");
@@ -140,12 +140,12 @@ public class RandomCombinationAdderTaskAddressClustersImpl extends AbstractRando
         params.put("txid", txid);
         Result txidToCluster = openSession.query(
         "MATCH (a:Address)<-[:ADDRESS]-(:TransactionOutput)-[:SPENT_IN]->(:TransactionInput)-[:INPUT]->(:Transaction {txid:$txid})\n" +
-        "WITH $txid as txid, collect(a)[0] as address\n" +
+        "WITH collect(a)[0] as address\n" +
         "OPTIONAL MATCH (c:MultiInputHeuristicCluster)<-[:INCLUDED_IN]-(address)\n" +
-        "WITH txid, address, c\n" +
+        "WITH address, c\n" +
         "OPTIONAL MATCH (c)<-[:INCLUDED_IN]-(aa:Address)\n" +
-        "WITH txid, min(aa.address) as clusterAddress, c, address\n" +
-        "RETURN txid, coalesce(clusterAddress, address.address) as clusterId, coalesce(c.clusterSize, 1) as clusterSize;", params);
+        "WITH min(aa.address) as clusterAddress, c, address\n" +
+        "RETURN coalesce(clusterAddress, address.address) as clusterId, coalesce(c.clusterSize, 1) as clusterSize;", params);
         for (Map<String, Object> e :txidToCluster.queryResults()) {
             return (String) e.get("clusterId");
         }
