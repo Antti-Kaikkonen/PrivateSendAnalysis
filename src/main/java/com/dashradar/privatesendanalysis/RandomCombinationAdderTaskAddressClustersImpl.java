@@ -12,7 +12,7 @@ import org.neo4j.ogm.session.SessionFactory;
 
 public class RandomCombinationAdderTaskAddressClustersImpl extends AbstractRandomCombinationAdderTask {
 
-    Map<String, String> graphToClusterData = new HashMap<>();
+    Map<String, String> createDenominationsTransactionToKey = new HashMap<>();
     
     SessionFactory sessionFactory;
     
@@ -37,11 +37,11 @@ public class RandomCombinationAdderTaskAddressClustersImpl extends AbstractRando
                 DefaultEdge lastEdge = e.get(e.size()-1);
                 String to = pi.graph.getEdgeTarget(lastEdge);
                 String clusterId;
-                if (graphToClusterData.containsKey(to)) {
-                    clusterId = graphToClusterData.get(to);
+                if (createDenominationsTransactionToKey.containsKey(to)) {
+                    clusterId = createDenominationsTransactionToKey.get(to);
                 } else {
-                    clusterId = getClusterId(to);
-                    graphToClusterData.put(to, clusterId);
+                    clusterId = getClusterId2(to).toResultAndCountKey();
+                    createDenominationsTransactionToKey.put(to, clusterId);
                 }
                 //String clusterId = graphToClusterData.get(to);
                 //result.compute(to, (k, v) -> v == null ? 1 : v+1);
@@ -49,6 +49,89 @@ public class RandomCombinationAdderTaskAddressClustersImpl extends AbstractRando
             });
             resultAndCount.addCombination(combinationResult);   
         };
+    }
+
+ 
+    @Override
+    boolean isResultAndCountOutdated(ResultAndCount rs) {
+        Map<String, String> oldKeyToNewKey = new HashMap<>();
+        boolean isOutdated = rs.result.keySet().stream().anyMatch(key -> {
+            String[] split = key.split(",");
+            String address = split[0];
+            int oldClusterSize = Integer.parseInt(split[1]);
+            Cluster cluster = getClusterIdFromAddress(address);
+            if (!cluster.clusterAddress.equals(address)) {
+                oldKeyToNewKey.put(key, cluster.toResultAndCountKey());
+            }
+            return cluster.clusterSize != oldClusterSize;
+        });
+        if (isOutdated) {
+            return true;
+        } else {
+            oldKeyToNewKey.entrySet().forEach(e -> {
+                String oldKey = e.getKey();
+                String newKeykey = e.getValue();
+                Long value = rs.result.get(oldKey);
+                if (value == null) throw new RuntimeException("null value while replacing " + oldKey+" with "+newKeykey);
+                rs.result.remove(oldKey);
+                rs.result.put(newKeykey, value);
+            });
+            return false;
+        }
+    }
+    
+    private int getClusterSize(String clusterAddress) {
+        Session openSession = sessionFactory.openSession();
+        HashMap<String, Object> params = new HashMap<>();
+        params.put("address", clusterAddress);
+        Result clusterSize = openSession.query("MATCH (:Address {address:$address})-[:INCLUDED_IN]->(c:MultiInputHeuristicCluster) RETURN c.clusterSize as clusterSize;", params);
+        for (Map<String, Object> e :clusterSize.queryResults()) {
+            return (int) e.get("clusterSize");
+        }
+        return 1;
+    }
+    
+    private Cluster getClusterIdFromAddress(String address) {
+        Session openSession = sessionFactory.openSession();
+        HashMap<String, Object> params = new HashMap<>();
+        params.put("address", address);
+        Result txidToCluster = openSession.query(     
+        "OPTIONAL MATCH (c:MultiInputHeuristicCluster)<-[:INCLUDED_IN]-(:Address {address:$address})\n" +
+        "WITH txid, address, c\n" +
+        "OPTIONAL MATCH (c)<-[:INCLUDED_IN]-(firstClusterAddress:Address)\n" +
+        "WITH txid, firstClusterAddress.address as clusterAddress, c, $address as address\n" +
+        "LIMIT 1\n" +
+        "RETURN txid, coalesce(clusterAddress, address.address) as clusterId, coalesce(c.clusterSize, 1) as clusterSize;", params);
+        for (Map<String, Object> e :txidToCluster.queryResults()) {
+            Cluster c = new Cluster();
+            c.clusterSize = (int) e.get("clusterSize");
+            c.clusterAddress= (String) e.get("clusterId");
+            return c;
+        }
+        throw new RuntimeException("NO CLUSTERID!");
+    }
+    
+    private Cluster getClusterId2(String txid) {
+        Session openSession = sessionFactory.openSession();
+        HashMap<String, Object> params = new HashMap<>();
+        params.put("txid", txid);
+        Result txidToCluster = openSession.query(
+        "MATCH (address:Address)<-[:ADDRESS]-(:TransactionOutput)-[:SPENT_IN]->(:TransactionInput)-[:INPUT]->(:Transaction {txid:$txid})\n" +
+        "WITH $txid as txid, address\n" +
+        "LIMIT 1\n" +      
+        "OPTIONAL MATCH (c:MultiInputHeuristicCluster)<-[:INCLUDED_IN]-(address)\n" +
+        "WITH txid, address, c\n" +
+        "OPTIONAL MATCH (c)<-[:INCLUDED_IN]-(firstClusterAddress:Address)\n" +
+        "WITH txid, firstClusterAddress.address as clusterAddress, c, address\n" +
+        "LIMIT 1\n" +
+        "RETURN txid, coalesce(clusterAddress, address.address) as clusterId, coalesce(c.clusterSize, 1) as clusterSize;", params);
+        for (Map<String, Object> e :txidToCluster.queryResults()) {
+            Cluster c = new Cluster();
+            c.clusterSize = (int) e.get("clusterSize");
+            c.clusterAddress= (String) e.get("clusterId");
+            return c;
+        }
+        throw new RuntimeException("NO CLUSTERID!");
     }
     
     private String getClusterId(String txid) {
@@ -67,6 +150,15 @@ public class RandomCombinationAdderTaskAddressClustersImpl extends AbstractRando
             return (String) e.get("clusterId");
         }
         throw new RuntimeException("NO CLUSTERID!");
+    }
+    
+    private class Cluster {
+        int clusterSize;
+        String clusterAddress;
+        
+        public String toResultAndCountKey() {
+            return clusterAddress+","+clusterSize;
+        }
     }
 
 }

@@ -54,6 +54,10 @@ public abstract class AbstractRandomCombinationAdderTask implements RandomCombin
     abstract Consumer<List<List<DefaultEdge>>> getConsumer();
     
 
+    boolean isResultAndCountOutdated(ResultAndCount rs) {
+        return false;
+    }
+    
     @Override
     public void run() {
         try {
@@ -81,6 +85,10 @@ public abstract class AbstractRandomCombinationAdderTask implements RandomCombin
             for (int rounds = 2; rounds <= 8; rounds++) {
                 String filePath = directory+"/"+rounds+"/"+txid+".txt";
                 ResultAndCount old = ResultAndCount.loadResultAndCountFromFile(filePath);
+                if (isResultAndCountOutdated(old)) {
+                    System.out.println(txid+" "+rounds+" outdated!");
+                    old = new ResultAndCount();
+                }
                 if (old.notfound || old.count > 100000) {
                     if (old.count > 100000) System.out.println("OVER 100k");
                     continue;

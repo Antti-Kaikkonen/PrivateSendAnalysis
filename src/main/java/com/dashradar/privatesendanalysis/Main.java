@@ -71,7 +71,7 @@ public class Main {
             
             System.out.println("Args end");
             int qInitialSize = 10;
-            ThreadPoolExecutor tpe = new ThreadPoolExecutor(14, 14, 1000, TimeUnit.MILLISECONDS, new PriorityBlockingQueue<Runnable>(qInitialSize, new Comparator<Runnable>() {
+            ThreadPoolExecutor tpe = new ThreadPoolExecutor(16, 16, 1000, TimeUnit.MILLISECONDS, new PriorityBlockingQueue<Runnable>(qInitialSize, new Comparator<Runnable>() {
                 @Override
                 public int compare(Runnable o1, Runnable o2) {
                     Comparable<Comparable> a = (Comparable<Comparable>)o1;
@@ -82,7 +82,7 @@ public class Main {
             tpe.allowCoreThreadTimeOut(true);
             
             
-            Long fromBlock = blockRepository.findBlockHeightByHash(blockRepository.findBestBlockHash())-10000;
+            Long fromBlock = blockRepository.findBlockHeightByHash(blockRepository.findBestBlockHash())-5000;
 
             
             while (true) {
